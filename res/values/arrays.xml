@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string-array name="sensorType">
+		<item>Accelerometer</item>
+		<item>Gravity</item>
+		<item>Gyroscope</item>
+		<item>Linear Accelerator</item>
+		<item>Rotation</item>
+	</string-array>
+</resources>

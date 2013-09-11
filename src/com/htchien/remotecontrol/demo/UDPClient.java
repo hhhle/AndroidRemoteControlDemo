@@ -38,11 +38,12 @@ public class UDPClient {
 	}
 
 	public void send(SensorEvent sensorEvent) {
-		String dataToSend = String.format("%d\t%d\t%d\t%s\t%d\t%s\t%d\t%s",
-			UDPServer.SENSOR_TYPE, sensorEvent.sensor.getType(),
-			UDPServer.SENSOR_X, sensorEvent.values[0],
-			UDPServer.SENSOR_Y, sensorEvent.values[1],
-			UDPServer.SENSOR_Z, sensorEvent.values[2]);
+		String dataToSend = String.format("%d\t%d",
+			UDPServer.SENSOR_TYPE, sensorEvent.sensor.getType());
+
+		for (int i = 0; i < sensorEvent.values.length; i++)
+			dataToSend += String.format("\t%d\t%s", UDPServer.SENSOR_VALUE, sensorEvent.values[i]);
+
 		Log.d(TAG, "Sending data: " + dataToSend + " to " + serverIP + ":" + serverPort);
 		send(dataToSend);
 	}

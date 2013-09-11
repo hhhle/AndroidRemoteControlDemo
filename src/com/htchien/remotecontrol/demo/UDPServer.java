@@ -1,5 +1,6 @@
 package com.htchien.remotecontrol.demo;
 
+import android.hardware.Sensor;
 import android.util.Log;
 
 import java.net.DatagramPacket;
@@ -14,9 +15,7 @@ public class UDPServer {
 
 	static final int SENSOR_DATA    = 100;
 	static final int SENSOR_TYPE    = SENSOR_DATA + 1;
-	static final int SENSOR_X       = SENSOR_DATA + 2;
-	static final int SENSOR_Y       = SENSOR_DATA + 3;
-	static final int SENSOR_Z       = SENSOR_DATA + 4;
+	static final int SENSOR_VALUE   = SENSOR_DATA + 2;
 
 	byte[] receiveData = new byte[1024];
 	int serverPort = 9876;
@@ -27,8 +26,8 @@ public class UDPServer {
 		mSensorViewUpdater = sensorViewUpdater;
 	}
 
-	public void start()
-	{
+	public void start() {
+		Log.i(TAG, "start");
 		DatagramSocket serverSocket = null;
 		try {
 			serverSocket = new DatagramSocket(serverPort);
@@ -55,39 +54,33 @@ public class UDPServer {
 	}
 
 	public void stop() {
+		Log.i(TAG, "stop");
 		isStop = true;
 	}
 
 	protected void process(String data) {
+		Log.d(TAG, "process: " + data);
 		int type = -1;
-		float x = 0f, y = 0f, z = 0f;
 		boolean fOK = true;
 
 		try {
 			String[] values = data.split("\t");
+			float[] fValues = new float[(values.length / 2) - 1];
 
 			if (SENSOR_TYPE == Integer.parseInt(values[0]))
 				type = Integer.parseInt(values[1]);
 			else
 				fOK = false;
 
-			if (SENSOR_X == Integer.parseInt(values[2]))
-				x = Float.parseFloat(values[3]);
-			else
-				fOK = false;
-
-			if (SENSOR_Y == Integer.parseInt(values[4]))
-				y = Float.parseFloat(values[5]);
-			else
-				fOK = false;
-
-			if (SENSOR_Z == Integer.parseInt(values[6]))
-				z = Float.parseFloat(values[7]);
-			else
-				fOK = false;
+			for (int i = 2; i < values.length; i += 2) {
+				if (SENSOR_VALUE == Integer.parseInt(values[i]))
+					fValues[(i - 2)/2] = Float.parseFloat(values[i+1]);
+				else
+					fOK = false;
+			}
 
 			if (fOK && mSensorViewUpdater != null)
-				mSensorViewUpdater.updateView(type, x, y, z);
+				mSensorViewUpdater.updateView(type, fValues);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

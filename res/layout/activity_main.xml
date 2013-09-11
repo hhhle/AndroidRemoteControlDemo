@@ -41,6 +41,13 @@
 		    android:hint="Enter IP address."
 			/>
 
+		<Button
+			android:id="@+id/sensor_connect"
+		    android:layout_width="match_parent"
+		    android:layout_height="wrap_content"
+		    android:text="Connect"
+			/>
+
 		<TextView
 			android:layout_width="match_parent"
 		    android:layout_height="wrap_content"

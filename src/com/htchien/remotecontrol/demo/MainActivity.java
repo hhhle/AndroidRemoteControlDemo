@@ -5,17 +5,17 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.opengl.GLSurfaceView;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.app.Activity;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.Message;
+import android.os.PowerManager;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
@@ -25,11 +25,15 @@ import android.widget.Spinner;
 public class MainActivity extends Activity implements SensorEventListener, ISensorViewUpdater {
 	final String TAG = MainActivity.class.getSimpleName();
 
+	LinearLayout mFrameView;
 	CheckBox mCheckBoxServer;
 	EditText mEditTextServerIP;
+	Button mButtonConnect;
 	Spinner mSpinnerSensorType;
 	int mSensorType = Sensor.TYPE_ACCELEROMETER;
 	SensorView mSensorView;
+	SensorRenderer mSensorRenderer;
+	GLSurfaceView mGLSurfaceView;
 
 	UDPServer mUDPServer = null;
 	ServerTask mServerTask = null;
@@ -43,6 +47,9 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 	Sensor mLinearAccelerometerSensor;
 	Sensor mRotationVectorSensor;
 	boolean sensorRegistered = false;
+
+	private PowerManager mPowerManager;
+	private PowerManager.WakeLock mWakeLock;
 
 	@Override
 	public void onSensorChanged(final SensorEvent event) {
@@ -96,14 +103,19 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 
 	@Override
 	public void onAccuracyChanged(Sensor sensor, int accuracy) {
-
+		Log.d(TAG, "onAccuracyChanged: " + sensor + ":" + accuracy);
 	}
 
 	@Override
-	public void updateView(int type, float x, float y, float z) {
-		Log.d(TAG, "updateView - type: " + type + "\tx: " + x + "\ty: " + y + "\tz: " + z);
-		if (type == mSensorType && mSensorView != null)
-			mSensorView.updateSensorPosition(type, x, y, z);
+	public void updateView(int type, float[] values) {
+		Log.d(TAG, "updateView - type: " + type + "\tvalues: " + values);
+		if (type == mSensorType && mSensorView != null) {
+			if (mSensorType != Sensor.TYPE_ROTATION_VECTOR)
+				mSensorView.updateSensorPosition(values);
+			else {
+				mSensorRenderer.updateRenderer(values);
+			}
+		}
 	}
 
 	protected class ServerTask extends AsyncTask<Void, Void, Void> {
@@ -122,28 +134,32 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 	}
 
 	void initUI() {
-		LinearLayout frameView = (LinearLayout)findViewById(R.id.sensor_frame);
+		mFrameView = (LinearLayout)findViewById(R.id.sensor_frame);
 		mCheckBoxServer = (CheckBox)findViewById(R.id.sensor_server);
 		mCheckBoxServer.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
 			@Override
 			public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
 				mEditTextServerIP.setEnabled(!isChecked);
-				mSpinnerSensorType.setEnabled(isChecked);
+				mButtonConnect.setEnabled(!isChecked);
 				clearUp();
 				if (isChecked) {
 					mServerTask = new ServerTask();
 					mServerTask.execute((Void)null);
 					stopSensors();
 				}
-				else {
-					String serverIP = mEditTextServerIP.getText().toString();
-					if (mUDPClient == null && serverIP.length() > 0)
-						mUDPClient = new UDPClient(serverIP);
-					startSensors();
-				}
 			}
 		});
 		mEditTextServerIP = (EditText)findViewById(R.id.sensor_ip);
+		mButtonConnect = (Button)findViewById(R.id.sensor_connect);
+		mButtonConnect.setOnClickListener(new View.OnClickListener() {
+			@Override
+			public void onClick(View v) {
+				String serverIP = mEditTextServerIP.getText().toString();
+				if (mUDPClient == null && serverIP.length() > 0)
+					mUDPClient = new UDPClient(serverIP);
+				startSensors();
+			}
+		});
 		mSpinnerSensorType = (Spinner)findViewById(R.id.sensor_type);
 		mSpinnerSensorType.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
 			@Override
@@ -165,6 +181,19 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 						mSensorType = Sensor.TYPE_ROTATION_VECTOR;
 						break;
 				}
+
+				if (mSensorType == Sensor.TYPE_ROTATION_VECTOR) {
+					if (mSensorView.getParent() == mFrameView) {
+						mFrameView.removeView(mSensorView);
+						mFrameView.addView(mGLSurfaceView);
+					}
+				}
+				else {
+					if (mGLSurfaceView.getParent() == mFrameView) {
+						mFrameView.removeView(mGLSurfaceView);
+						mFrameView.addView(mSensorView);
+					}
+				}
 			}
 
 			@Override
@@ -177,11 +206,18 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 		ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
 		mSensorView = new SensorView(this);
 		mSensorView.setLayoutParams(layoutParams);
-		frameView.removeView(view);
-		frameView.addView(mSensorView);
+		mFrameView.removeView(view);
+		mFrameView.addView(mSensorView);
+
+		mSensorRenderer = new SensorRenderer();
+		mGLSurfaceView = new GLSurfaceView(this);
+		mGLSurfaceView.setLayoutParams(layoutParams);
+		mGLSurfaceView.setRenderer(mSensorRenderer);
+
 	}
 
 	void initSensors() {
+		Log.i(TAG, "initSensors");
 		mSensorManager = (SensorManager)getSystemService(Context.SENSOR_SERVICE);
 		if (mSensorManager != null) {
 			mAccelerometerSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -217,6 +253,7 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 	}
 
 	void clearUp() {
+		Log.i(TAG, "clearUp");
 		if (mUDPClient != null)
 			mUDPClient = null;
 		if (mUDPServer != null)
@@ -231,25 +268,50 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
+		Log.i(TAG, "onCreate");
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+
+		// Get an instance of the PowerManager
+		mPowerManager = (PowerManager) getSystemService(POWER_SERVICE);
+		// Create a bright wake lock
+		mWakeLock = mPowerManager.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, TAG);
+
 		initUI();
 		initSensors();
 	}
 
 	@Override
 	protected void onResume() {
+		Log.i(TAG, "onResume");
+        /*
+         * when the activity is resumed, we acquire a wake-lock so that the
+         * screen stays on, since the user will likely not be fiddling with the
+         * screen or buttons.
+         */
+		mWakeLock.acquire();
 		super.onResume();
 	}
 
 	@Override
+	protected void onPause() {
+		Log.i(TAG, "onPause");
+		super.onPause();
+
+		// and release our wake-lock
+		mWakeLock.release();
+	}
+
+	@Override
 	protected void onDestroy() {
+		Log.i(TAG, "onDestroy");
 		super.onDestroy();
 		clearUp();
 	}
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
+		Log.i(TAG, "onCreateOpetionsMenu");
 		// Inflate the menu; this adds items to the action bar if it is present.
 		getMenuInflater().inflate(R.menu.main, menu);
 		return true;

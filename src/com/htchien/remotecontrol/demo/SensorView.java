@@ -6,6 +6,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.hardware.Sensor;
 import android.util.Log;
 import android.view.View;
 
@@ -27,15 +28,16 @@ public class SensorView extends View {
 		mPaint.setColor(getResources().getColor(R.color.holo_red_dark));
 	}
 
-	public void updateSensorPosition(int type, float x, float y, float z) {
-		mX = (int)(x * 100f);
-		mY = (int)(y * 100f);
+	public void updateSensorPosition(float[] values) {
+		mX = (int)(values[0] * 100f);
+		mY = (int)(values[1] * 100f);
 		postInvalidate();
-		Log.d(TAG, "updateSensorPosition - type: " + type + "\tx: " + mX + "\ty: " + mY + "\tz: " + z);
+		Log.d(TAG, "updateSensorPosition - values: " + mX + ", " + mY);
 	}
 
 	@Override
 	protected void onDraw(Canvas canvas) {
+		Log.i(TAG, "onDraw");
 		canvas.drawCircle((getWidth() / 2) + mX, (getHeight() / 2) + mY, dotRadius, mPaint);
 	}
 }

@@ -14,7 +14,7 @@ public class SensorRenderer implements GLSurfaceView.Renderer {
 	final String TAG = SensorRenderer.class.getSimpleName();
 
 	private Cube mCube;
-	private final float[] mRotationMatrix = new float[16];
+	protected final float[] mRotationMatrix = new float[16];
 
 	public SensorRenderer() {
 		mCube = new Cube();

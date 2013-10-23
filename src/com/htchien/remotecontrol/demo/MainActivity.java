@@ -10,10 +10,13 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.app.Activity;
 import android.os.PowerManager;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -32,6 +35,8 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 	Spinner mSpinnerSensorType;
 	int mSensorType = Sensor.TYPE_ACCELEROMETER;
 	SensorView mSensorView;
+	GyroscopeSensorRenderer mGyroscopeSensorRenderer;
+	GLSurfaceView mGyroscopeSurfaceView;
 	SensorRenderer mSensorRenderer;
 	GLSurfaceView mGLSurfaceView;
 
@@ -42,14 +47,20 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 
 	SensorManager mSensorManager;
 	Sensor mAccelerometerSensor;
+    boolean sensorAccelerometerRegistered = false;
 	Sensor mGravitySensor;
+    boolean sensorGravityRegistered = false;
 	Sensor mGyroscopeSensor;
+    boolean sensorGyroscopeRegistered = false;
 	Sensor mLinearAccelerometerSensor;
+    boolean sensorLinearAccelerometerRegistered = false;
 	Sensor mRotationVectorSensor;
-	boolean sensorRegistered = false;
+    boolean sensorRotationVectorRegistered = false;
 
 	private PowerManager mPowerManager;
 	private PowerManager.WakeLock mWakeLock;
+    private WindowManager mWindowManager;
+    private DisplayMetrics mMetrics;
 
 	@Override
 	public void onSensorChanged(final SensorEvent event) {
@@ -110,11 +121,12 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 	public void updateView(int type, float[] values) {
 		Log.d(TAG, "updateView - type: " + type + "\tvalues: " + values);
 		if (type == mSensorType && mSensorView != null) {
-			if (mSensorType != Sensor.TYPE_ROTATION_VECTOR)
-				mSensorView.updateSensorPosition(values);
-			else {
+			if (mSensorType != Sensor.TYPE_ROTATION_VECTOR && mSensorType != Sensor.TYPE_GYROSCOPE)
+				mSensorView.updatePosition(values);
+			else if (mSensorType == Sensor.TYPE_GYROSCOPE)
+				mGyroscopeSensorRenderer.updateRenderer(values);
+			else
 				mSensorRenderer.updateRenderer(values);
-			}
 		}
 	}
 
@@ -157,7 +169,7 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 				String serverIP = mEditTextServerIP.getText().toString();
 				if (mUDPClient == null && serverIP.length() > 0)
 					mUDPClient = new UDPClient(serverIP);
-				startSensors();
+				startSensor();
 			}
 		});
 		mSpinnerSensorType = (Spinner)findViewById(R.id.sensor_type);
@@ -182,18 +194,31 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 						break;
 				}
 
-				if (mSensorType == Sensor.TYPE_ROTATION_VECTOR) {
-					if (mSensorView.getParent() == mFrameView) {
+				if (mSensorType == Sensor.TYPE_ROTATION_VECTOR || mSensorType == Sensor.TYPE_GYROSCOPE) {
+					if (mSensorView.getParent() == mFrameView)
 						mFrameView.removeView(mSensorView);
-						mFrameView.addView(mGLSurfaceView);
-					}
+					
+                    if (mSensorType == Sensor.TYPE_ROTATION_VECTOR) {
+	                    if (mGyroscopeSurfaceView.getParent() == mFrameView)
+	                    	mFrameView.removeView(mGyroscopeSurfaceView);
+	                    if (mGLSurfaceView.getParent() != mFrameView)
+	    					mFrameView.addView(mGLSurfaceView);
+                    }
+                    else if (mSensorType == Sensor.TYPE_GYROSCOPE) {
+	                    if (mGLSurfaceView.getParent() == mFrameView)
+	    					mFrameView.removeView(mGLSurfaceView);
+	                    if (mGyroscopeSurfaceView.getParent() != mFrameView)
+	                    	mFrameView.addView(mGyroscopeSurfaceView);
+                    }
 				}
 				else {
-					if (mGLSurfaceView.getParent() == mFrameView) {
+                    if (mGyroscopeSurfaceView.getParent() == mFrameView)
+                    	mFrameView.removeView(mGyroscopeSurfaceView);
+					if (mGLSurfaceView.getParent() == mFrameView)
 						mFrameView.removeView(mGLSurfaceView);
-						mFrameView.addView(mSensorView);
-					}
-				}
+                    if (mSensorView.getParent() != mFrameView)
+                        mFrameView.addView(mSensorView);
+ 				}
 			}
 
 			@Override
@@ -214,7 +239,11 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 		mGLSurfaceView.setLayoutParams(layoutParams);
 		mGLSurfaceView.setRenderer(mSensorRenderer);
 
-	}
+        mGyroscopeSensorRenderer = new GyroscopeSensorRenderer();
+        mGyroscopeSurfaceView = new GLSurfaceView(this);
+        mGyroscopeSurfaceView.setLayoutParams(layoutParams);
+        mGyroscopeSurfaceView.setRenderer(mGyroscopeSensorRenderer);
+}
 
 	void initSensors() {
 		Log.i(TAG, "initSensors");
@@ -228,28 +257,59 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 		}
 	}
 
-	public void startSensors() {
-		if (!sensorRegistered) {
-			mSensorManager.registerListener(this, mAccelerometerSensor, SensorManager.SENSOR_DELAY_UI);
-			mSensorManager.registerListener(this, mGravitySensor, SensorManager.SENSOR_DELAY_UI);
-			mSensorManager.registerListener(this, mGyroscopeSensor, SensorManager.SENSOR_DELAY_UI);
-			mSensorManager.registerListener(this, mLinearAccelerometerSensor, SensorManager.SENSOR_DELAY_UI);
-			mSensorManager.registerListener(this, mRotationVectorSensor, SensorManager.SENSOR_DELAY_UI);
-			Log.i(TAG, "Sensors started.");
-			sensorRegistered = true;
-		}
+	public void startSensor() {
+        sensorAccelerometerRegistered = false;
+        sensorGravityRegistered = false;
+        sensorGyroscopeRegistered = false;
+        sensorLinearAccelerometerRegistered = false;
+        sensorRotationVectorRegistered = false;
+
+        switch (mSensorType) {
+            case Sensor.TYPE_ACCELEROMETER:
+                sensorAccelerometerRegistered = mSensorManager.registerListener(this,
+                        mAccelerometerSensor, SensorManager.SENSOR_DELAY_UI);
+                break;
+            case Sensor.TYPE_GRAVITY:
+                sensorGravityRegistered = mSensorManager.registerListener(this,
+                        mGravitySensor, SensorManager.SENSOR_DELAY_UI);
+                break;
+            case Sensor.TYPE_GYROSCOPE:
+                sensorGyroscopeRegistered = mSensorManager.registerListener(this,
+                        mGyroscopeSensor, SensorManager.SENSOR_DELAY_UI);
+                break;
+            case Sensor.TYPE_LINEAR_ACCELERATION:
+                sensorLinearAccelerometerRegistered = mSensorManager.registerListener(this,
+                        mLinearAccelerometerSensor, SensorManager.SENSOR_DELAY_UI);
+                break;
+            case Sensor.TYPE_ROTATION_VECTOR:
+                sensorRotationVectorRegistered = mSensorManager.registerListener(this,
+                        mRotationVectorSensor, SensorManager.SENSOR_DELAY_UI);
+                break;
+        }
+        Log.i(TAG, "Sensor started.");
 	}
 
 	public void stopSensors() {
-		if (sensorRegistered) {
+		if (sensorAccelerometerRegistered)
 			mSensorManager.unregisterListener(this, mAccelerometerSensor);
-			mSensorManager.unregisterListener(this, mGravitySensor);
-			mSensorManager.unregisterListener(this, mGyroscopeSensor);
-			mSensorManager.unregisterListener(this, mLinearAccelerometerSensor);
-			mSensorManager.unregisterListener(this, mRotationVectorSensor);
-			Log.i(TAG, "Sensors stopped.");
-			sensorRegistered = false;
-		}
+        sensorAccelerometerRegistered = false;
+
+        if (sensorGravityRegistered)
+            mSensorManager.unregisterListener(this, mGravitySensor);
+        sensorGravityRegistered = false;
+
+        if (sensorGyroscopeRegistered)
+            mSensorManager.unregisterListener(this, mGyroscopeSensor);
+        sensorGyroscopeRegistered = false;
+
+        if (sensorLinearAccelerometerRegistered)
+            mSensorManager.unregisterListener(this, mLinearAccelerometerSensor);
+        sensorLinearAccelerometerRegistered = false;
+
+        if (sensorRotationVectorRegistered)
+            mSensorManager.unregisterListener(this, mRotationVectorSensor);
+        sensorRotationVectorRegistered = false;
+        Log.i(TAG, "Sensors stopped.");
 	}
 
 	void clearUp() {
@@ -276,6 +336,11 @@ public class MainActivity extends Activity implements SensorEventListener, ISens
 		mPowerManager = (PowerManager) getSystemService(POWER_SERVICE);
 		// Create a bright wake lock
 		mWakeLock = mPowerManager.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, TAG);
+
+        // Get an instance of the WindowManager
+        mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        mMetrics = new DisplayMetrics();
+        mWindowManager.getDefaultDisplay().getMetrics(mMetrics);
 
 		initUI();
 		initSensors();

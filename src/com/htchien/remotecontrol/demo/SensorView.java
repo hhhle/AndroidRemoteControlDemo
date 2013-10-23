@@ -1,14 +1,17 @@
 package com.htchien.remotecontrol.demo;
 
-import android.*;
-import android.R;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.hardware.Sensor;
+import android.text.BoringLayout.Metrics;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
+
+import static java.lang.Math.abs;
 
 /**
  * Created by tedchien on 13/9/2.
@@ -17,27 +20,52 @@ public class SensorView extends View {
 	final String TAG = SensorView.class.getSimpleName();
 
 	final int dotRadius = 10;
+    final float ratio = 50f;
 
-	Paint mPaint;
-	int mX = 0, mY = 0;
+    Paint mPaint = new Paint();
+    float mX, mY;
+    float mZ = 0f;
+
+    Bitmap mBitmap;
+    float mXOrigin, mYOrigin;
 
 	public SensorView(Context context) {
 		super(context);
 
-		mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-		mPaint.setColor(getResources().getColor(R.color.holo_red_dark));
+        // rescale the ball so it's about 0.5 cm on screen
+        mBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.ball);
+        
+        mPaint.setColor(Color.RED);
+        mPaint.setTextSize(24);
 	}
 
-	public void updateSensorPosition(float[] values) {
-		mX = (int)(values[0] * 100f);
-		mY = (int)(values[1] * 100f);
-		postInvalidate();
-		Log.d(TAG, "updateSensorPosition - values: " + mX + ", " + mY);
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        // compute the origin of the screen relative to the origin of
+        // the bitmap
+        mXOrigin = (w - mBitmap.getWidth()) * 0.5f;
+        mYOrigin = (h - mBitmap.getHeight()) * 0.5f;
+    }
+
+	public void updatePosition(float[] values) {
+		mX = values[0] * ratio;
+		mY = values[1] * ratio;
+		mZ = values[2] * ratio;
+        
+		Log.d(TAG, "updatePosition - values: " + mX + ", " + mY + ", " + mZ);
 	}
 
 	@Override
 	protected void onDraw(Canvas canvas) {
 		Log.i(TAG, "onDraw");
-		canvas.drawCircle((getWidth() / 2) + mX, (getHeight() / 2) + mY, dotRadius, mPaint);
+		
+		float x = mXOrigin + mX;
+		float y = mYOrigin - mY;
+		canvas.drawBitmap(mBitmap, x, y, null);
+		
+        canvas.drawCircle(mXOrigin, mYOrigin + mZ, dotRadius, mPaint);
+        canvas.drawText("Values: " + mX + ", " + mY + ", " + mZ, 100, 100, mPaint);
+        
+        invalidate();
 	}
 }

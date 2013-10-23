@@ -1,6 +1,5 @@
 package com.htchien.remotecontrol.demo;
 
-import android.hardware.Sensor;
 import android.util.Log;
 
 import java.net.DatagramPacket;
